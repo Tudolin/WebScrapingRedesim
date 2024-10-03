@@ -40,21 +40,41 @@ def encontrar_elemento_com_multiplos_select(soup, selectors):
             return elemento.get_text(strip=True)
     return None
 
-def consulta_redesim(n_protocolo):
+def encontrar_status_por_texto(soup, texto_licenca):
     """
-    Realiza a consulta no site da Redesim usando o número de protocolo fornecido e extrai informações dos status dos processos.
+    Encontra o status de uma licença dado o texto da licença.
 
     Args:
-        n_protocolo (str): Número de protocolo usado para consulta no site da Redesim.
+        soup (BeautifulSoup): Objeto BeautifulSoup da página HTML.
+        texto_licenca (str): Texto da licença a ser encontrada.
 
     Returns:
-        dict: Dicionário contendo os resultados da consulta, organizados por órgãos e documentos encontrados.
+        str: Status da licença ou None se não encontrado.
     """
-    url = f"https://redesim.curitiba.pr.gov.br/licenciamento/{n_protocolo}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # Encontra o elemento que contém o texto da licença
+    licenca_element = soup.find(string=texto_licenca)
+    if not licenca_element:
+        return None
+
+    # Assume que o status está em um elemento próximo. Ajuste conforme a estrutura real.
+    # Por exemplo, se o status estiver em um <span> logo após o texto da licença:
+    parent = licenca_element.find_parent()
+    if not parent:
+        return None
+
+    # Tenta encontrar um elemento <span> que contenha o status
+    status_element = parent.find_next_sibling("span")
+    if status_element:
+        return status_element.get_text(strip=True)
+
+    # Alternativamente, se o status estiver dentro do mesmo elemento pai
+    status_element = parent.find("span")
+    if status_element:
+        return status_element.get_text(strip=True)
+
+    return None
     
-    # Estrutura inicial de resultados
+def consulta_redesim(n_protocolo):
     resultados = {
         "Secretaria Municipal do Meio Ambiente": {
             "Informações Adicionais": "",
@@ -82,90 +102,74 @@ def consulta_redesim(n_protocolo):
     }
     
     try:
-        # Coleta de informações da Secretaria Municipal do Meio Ambiente
-        resultados["Secretaria Municipal do Meio Ambiente"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(soup, ['#frmOrgao\\:j_idt75', '#frmOrgao\\:j_idt74', '#frmOrgao\\:j_idt76'])
+        url = f"https://redesim.curitiba.pr.gov.br/licenciamento/{n_protocolo}"
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Verificação e extração de licenças ambientais
-        licenca_previa = soup.find(string="Licença Ambiental Prévia")
-        licenca_instalacao = soup.find(string="Licença Ambiental de Instalação")
-        licenca_operacao = soup.find(string="Licença Ambiental de Operação")
+        # Verifica se a resposta contém informações válidas
+        if not soup or 'Nenhuma informação encontrada' in response.text:
+            raise ValueError(f"No valid data found for protocol {n_protocolo}")
 
-        if licenca_previa:
-            resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental Prévia"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#frmOrgao\\:j_idt81\\:0\\:j_idt86', '#frmOrgao\\:j_idt81\\:0\\:j_idt87',
-                '#frmOrgao\\:j_idt81\\:0\\:j_idt88', '#frmOrgao\\:j_idt81\\:0\\:j_idt89',
-                '#frmOrgao\\:j_idt81\\:0\\:j_idt90'
-            ])
-        
-        if licenca_instalacao:
-            resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Instalação"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt86', '#frmOrgao\\:j_idt81\\:1\\:j_idt87',
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt88', '#frmOrgao\\:j_idt81\\:1\\:j_idt89',
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt90'
-            ])
-        
-        if not licenca_instalacao and licenca_operacao:
-            resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Operação"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt86', '#frmOrgao\\:j_idt81\\:1\\:j_idt87',
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt88', '#frmOrgao\\:j_idt81\\:1\\:j_idt89',
-                '#frmOrgao\\:j_idt81\\:1\\:j_idt90'
-            ])
-        elif licenca_operacao:
-            resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Operação"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#frmOrgao\\:j_idt81\\:2\\:j_idt86', '#frmOrgao\\:j_idt81\\:2\\:j_idt87',
-                '#frmOrgao\\:j_idt81\\:2\\:j_idt88', '#frmOrgao\\:j_idt81\\:2\\:j_idt89',
-                '#frmOrgao\\:j_idt81\\:2\\:j_idt90'
-            ])
+        # Informações Adicionais - Secretaria Municipal do Meio Ambiente
+        resultados["Secretaria Municipal do Meio Ambiente"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(
+            soup, ['#frmOrgao\\:j_idt75', '#frmOrgao\\:j_idt74', '#frmOrgao\\:j_idt76']
+        )
 
-        # Coleta de informações da Vigilância Sanitária
-        resultados["Vigilância Sanitária"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(soup, ['#j_idt163\\:j_idt168', '#j_idt163\\:j_idt169', '#j_idt163\\:j_idt190'])
+        # Secretaria Municipal do Meio Ambiente - Documentos
+        resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental Prévia"] = encontrar_status_por_texto(
+            soup, "Licença Ambiental Prévia"
+        )
+        
+        resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Instalação"] = encontrar_status_por_texto(
+            soup, "Licença Ambiental de Instalação"
+        )
+        
+        resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Operação"] = encontrar_status_por_texto(
+            soup, "Licença Ambiental de Operação"
+        )
 
-        analise_projeto = soup.find(string="Análise de Projeto Arquitetônico")
-        declaracao_dispensacao = soup.find(string="Declaração de Dispensa de Licenciamento Sanitário")
-        licenca_sanit_sim = soup.find(string="Licença Sanitária Simplificada")
-        
-        if analise_projeto:
-            resultados["Vigilância Sanitária"]["Documentos"]["Análise de Projeto Arquitetônico"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#j_idt163\\:j_idt175\\:0\\:j_idt180', '#j_idt163\\:j_idt175\\:0\\:j_idt194',
-                '#j_idt163\\:j_idt175\\:0\\:j_idt195', '#j_idt163\\:j_idt175\\:0\\:j_idt196',
-                '#j_idt163\\:j_idt175\\:0\\:j_idt197', '#j_idt163\\:j_idt175\\:0\\:j_idt198'
-            ])
-        
-        if declaracao_dispensacao:
-            resultados["Vigilância Sanitária"]["Documentos"]["Declaração de Dispensa de Licenciamento Sanitário"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#j_idt163\\:j_idt175\\:1\\:j_idt178', '#j_idt163\\:j_idt175\\:1\\:j_idt179',
-                '#j_idt163\\:j_idt175\\:1\\:j_idt180', '#j_idt163\\:j_idt175\\:1\\:j_idt181',
-                '#j_idt163\\:j_idt175\\:1\\:j_idt182'
-            ])
+        # Vigilância Sanitária - Informações Adicionais
+        resultados["Vigilância Sanitária"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(
+            soup, ['#j_idt163\\:j_idt168', '#j_idt163\\:j_idt169', '#j_idt163\\:j_idt190']
+        )
 
-        if licenca_sanit_sim:
-            resultados["Vigilância Sanitária"]["Documentos"]["Licença Sanitária Simplificada"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#j_idt163\\:j_idt175\\:0\\:j_idt178', '#j_idt163\\:j_idt175\\:0\\:j_idt179',
-                '#j_idt163\\:j_idt175\\:0\\:j_idt180', '#j_idt163\\:j_idt175\\:0\\:j_idt181',
-                '#j_idt163\\:j_idt175\\:0\\:j_idt182'
-            ])
+        # Vigilância Sanitária - Documentos
+        resultados["Vigilância Sanitária"]["Documentos"]["Análise de Projeto Arquitetônico"] = encontrar_status_por_texto(
+            soup, "Análise de Projeto Arquitetônico"
+        )
         
-        # Coleta de informações da Secretaria Municipal de Finanças
-        resultados["Secretaria Municipal de Finanças"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(soup, ['#frmOrgao\\:j_idt257\\:j_idt258', '#frmOrgao\\:j_idt257\\:j_idt259', '#frmOrgao\\:j_idt257\\:j_idt260'])
+        resultados["Vigilância Sanitária"]["Documentos"]["Declaração de Dispensa de Licenciamento Sanitário"] = encontrar_status_por_texto(
+            soup, "Declaração de Dispensa de Licenciamento Sanitário"
+        )
+        
+        resultados["Vigilância Sanitária"]["Documentos"]["Licença Sanitária Simplificada"] = encontrar_status_por_texto(
+            soup, "Licença Sanitária Simplificada"
+        )
 
-        inscricao_municipal = soup.find(string="Inscrição Municipal")
-        alvara_localizacao = soup.find(string="Alvará de Licença de Localização")
+        # Secretaria Municipal de Finanças - Informações Adicionais
+        resultados["Secretaria Municipal de Finanças"]["Informações Adicionais"] = encontrar_elemento_com_multiplos_select(
+            soup, ['#frmOrgao\\:j_idt257\\:j_idt258', '#frmOrgao\\:j_idt257\\:j_idt259', '#frmOrgao\\:j_idt257\\:j_idt260']
+        )
+
+        # Secretaria Municipal de Finanças - Documentos
+        resultados["Secretaria Municipal de Finanças"]["Documentos"]["Inscrição Municipal"] = encontrar_status_por_texto(
+            soup, "Inscrição Municipal"
+        )
         
-        if inscricao_municipal:
-            resultados["Secretaria Municipal de Finanças"]["Documentos"]["Inscrição Municipal"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#j_idt257\\:j_idt269\\:0\\:j_idt275', '#j_idt257\\:j_idt269\\:0\\:j_idt276',
-                '#j_idt257\\:j_idt269\\:0\\:j_idt277', '#j_idt257\\:j_idt269\\:0\\:j_idt278'
-            ])
-        
-        if alvara_localizacao:
-            resultados["Secretaria Municipal de Finanças"]["Documentos"]["Alvará de Licença de Localização"] = encontrar_elemento_com_multiplos_select(soup, [
-                '#j_idt257\\:j_idt269\\:1\\:j_idt280', '#j_idt257\\:j_idt269\\:1\\:j_idt279',
-                '#j_idt257\\:j_idt269\\:1\\:j_idt278', '#j_idt257\\:j_idt269\\:1\\:j_idt277',
-                '#j_idt257\\:j_idt269\\:1\\:j_idt276'
-            ])
+        resultados["Secretaria Municipal de Finanças"]["Documentos"]["Alvará de Licença de Localização"] = encontrar_status_por_texto(
+            soup, "Alvará de Licença de Localização"
+        )
+
+        # Verifica se ao menos uma licença ambiental foi encontrada
+        if not resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental Prévia"] and \
+           not resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Instalação"] and \
+           not resultados["Secretaria Municipal do Meio Ambiente"]["Documentos"]["Licença Ambiental de Operação"]:
+            raise ValueError(f"Incomplete data for protocol {n_protocolo}")
         
     except Exception as e:
         print(f"Erro ao consultar protocolo {n_protocolo}: {e}")
+        return None
     
     return resultados
 
